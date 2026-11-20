@@ -1,4 +1,5 @@
 import ipaddress
+import math
 import os
 import sys
 from domains import is_valid_domain, normalize
@@ -13,8 +14,11 @@ REQUIRED_KEYS = [
     "ad_list_file",
     "sanction_list_file",
 ]
+
+
 class ConfigError(Exception):
     pass
+
 
 def _resolve_path(path: str) -> str:
     return path if os.path.isabs(path) else os.path.join(BASE_DIR, path)
@@ -24,15 +28,21 @@ def _read_key_values(path: str) -> dict:
     if not os.path.isfile(path):
         raise ConfigError(f"file not found: {path}")
     values = {}
-    with open(path, encoding="utf-8") as f:
-        for lineno, raw in enumerate(f, 1):
-            line = raw.strip()
-            if not line or line.startswith("#"):
-                continue
-            if "=" not in line:
-                raise ConfigError(f"line {lineno} is not in key=value form: {line}")
-            key, value = line.split("=", 1)
-            values[key.strip()] = value.strip()
+    try:
+ 
+        with open(path, encoding="utf-8-sig") as f:
+            for lineno, raw in enumerate(f, 1):
+                line = raw.strip()
+                if not line or line.startswith("#"):
+                    continue
+                if "=" not in line:
+                    raise ConfigError(
+                        f"line {lineno} is not in key=value form: {line}"
+                    )
+                key, value = line.split("=", 1)
+                values[key.strip()] = value.strip()
+    except (OSError, UnicodeDecodeError) as e:
+        raise ConfigError(f"cannot read {path}: {e}")
     return values
 
 
@@ -48,13 +58,15 @@ def _number(key: str, value: str, kind=int, minimum=0, maximum=None):
         number = kind(value)
     except ValueError:
         raise ConfigError(f"{key} must be a number, got '{value}'")
+   
+    if kind is float and not math.isfinite(number):
+        raise ConfigError(f"{key} must be a finite number, got '{value}'")
     if number < minimum or (maximum is not None and number > maximum):
         raise ConfigError(f"{key} is out of range: {value}")
     return number
 
 
 def load_config(path: str = CONFIG_PATH) -> dict:
-    """Return a validated config dict. Raises ConfigError on any problem."""
     raw = _read_key_values(path)
 
     for key in REQUIRED_KEYS:
@@ -76,7 +88,9 @@ def load_config(path: str = CONFIG_PATH) -> dict:
 
     cache_value = raw.get("cache_enabled", "true").lower()
     if cache_value not in ("true", "false"):
-        raise ConfigError(f"cache_enabled must be true or false, got '{raw['cache_enabled']}'")
+        raise ConfigError(
+            f"cache_enabled must be true or false, got '{raw['cache_enabled']}'"
+        )
     cfg["cache_enabled"] = cache_value == "true"
 
     for key in ("ad_list_file", "sanction_list_file"):
@@ -85,18 +99,28 @@ def load_config(path: str = CONFIG_PATH) -> dict:
 
     return cfg
 
+
 def load_list(path: str) -> set:
     entries = set()
-    with open(path, encoding="utf-8") as f:
-        for lineno, raw in enumerate(f, 1):
-            line = raw.strip()
-            if not line or line.startswith("#"):
-                continue
-            if not is_valid_domain(line):
-                print(f"Warning: bad line {lineno} in {os.path.basename(path)}: {line}")
-                continue
-            entries.add(normalize(line))
+    try:
+        with open(path, encoding="utf-8-sig") as f:
+            for lineno, raw in enumerate(f, 1):
+                line = raw.strip()
+                if not line or line.startswith("#"):
+                    continue
+                if not is_valid_domain(line):
+                    print(
+                        f"Warning: bad line {lineno} in "
+                        f"{os.path.basename(path)}: {line}"
+                    )
+                    continue
+                entries.add(normalize(line))
+    except (OSError, UnicodeDecodeError) as e:
+       
+        print(f"Config error: cannot read {path}: {e}")
+        sys.exit(1)
     return entries
+
 
 def load_config_or_exit() -> dict:
     try:
