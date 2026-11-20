@@ -12,4 +12,5 @@ def normalize(name: str) -> str:
     return name
 
 def matches(name: str, entries: set) -> bool:
-    return any(name == e or name.endswith("." + e) for e in entries)
+    labels = name.split(".")
+    return any(".".join(labels[i:]) in entries for i in range(len(labels)))

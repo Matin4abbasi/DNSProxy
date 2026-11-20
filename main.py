@@ -5,11 +5,13 @@ from domains import is_valid_domain, matches, normalize
 def make_result(domain, source, status, ip="-", ttl="-"):
     return {"Domain": domain, "Source": source, "Status": status, "IP": ip, "TTL": ttl}
 
+
 def print_block(result):
     """Always exactly five lines, then one blank line."""
     for label in ("Domain", "Source", "Status", "IP", "TTL"):
         print(f"{label} : {result[label]}")
     print()
+
 
 def resolve(text, cfg, ad_list, sanction_list, cache):
     """Apply the fixed decision order and return the result dict."""
@@ -26,6 +28,7 @@ def resolve(text, cfg, ad_list, sanction_list, cache):
     if matches(name, sanction_list):
         return make_result(name, "SANCTION", "OK", cfg["proxy_ip"], cfg["local_ttl"])
 
+    # 5. local cache (only if enabled)
     if cfg["cache_enabled"]:
         hit = cache.get(name)
         if hit is not None:
@@ -44,6 +47,7 @@ def resolve(text, cfg, ad_list, sanction_list, cache):
     if status == "NOT_FOUND":
         return make_result(name, "UPSTREAM", "NOT_FOUND")
     return make_result(name, "UPSTREAM", "SERVER_ERROR")
+
 
 def main():
     cfg = load_config_or_exit()
